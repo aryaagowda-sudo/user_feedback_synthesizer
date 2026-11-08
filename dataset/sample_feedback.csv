@@ -1,0 +1,31 @@
+feedback,rating,date,source
+"App crashes immediately when tapping the login button on iOS 18",1,2026-10-15,Mobile App (iOS)
+"Login page keeps freezing after entering Google OAuth credentials",1,2026-10-16,Web App
+"Unable to sign in on Android 15. The loading spinner never disappears",1,2026-10-17,Mobile App (Android)
+"Authentication timeout happens every 10 minutes, forcing me to re-login constantly",2,2026-10-18,Web App
+"Cannot log in with SSO today. Getting a blank white screen after authentication",1,2026-10-19,Support Ticket
+"Charged twice for my annual Pro subscription without receipt or explanation",1,2026-10-20,Support Ticket
+"Credit card payment failed three times even though funds are available",1,2026-10-21,Web App
+"Billing portal does not allow downloading monthly invoice PDFs",2,2026-10-22,Web App
+"Accidentally upgraded to Team plan, refund request took 6 days to respond",2,2026-10-23,Email
+"Payment gateway rejects non-US debit cards without showing a helpful error message",2,2026-10-24,Web App
+"Search filtering freezes the entire browser tab when querying more than 500 records",2,2026-10-25,Web App
+"Dashboard analytics takes over 15 seconds to load initial metrics",2,2026-10-26,Web App
+"Exporting feedback to CSV takes forever and frequently fails with a network error",1,2026-10-27,Web App
+"Heavy lag when scrolling through the feedback table on mobile Safari",2,2026-10-28,Mobile App (iOS)
+"Slow query response times on the AI Insights page during peak morning hours",3,2026-10-29,Web App
+"Please add automated Slack webhook notifications for high severity feedback alerts",4,2026-10-30,Discord Community
+"We desperately need Zapier or Make integration to pipe Zendesk tickets automatically",4,2026-10-31,Email
+"Would love an export option for raw JSON alongside CSV",5,2026-11-01,Web App
+"Can you add support for multi-language sentiment analysis (Spanish, French, German)?",4,2026-11-02,App Store Review
+"A Jira integration button would save our engineering leads hours of manual copying",5,2026-11-03,Web App
+"Dark mode is too high contrast; the white text on pitch black causes eye strain",3,2026-11-04,Web App
+"Typography is a bit too small on 14-inch laptop screens, hard to read small badges",3,2026-11-05,Web App
+"Navigation bar collapses awkwardly when resizing between tablet and desktop",3,2026-11-06,Web App
+"Color contrast between positive and neutral badges is hard to distinguish for colorblind users",2,2026-11-07,Web App
+"The new violet and cyan glassmorphism theme looks absolutely gorgeous and futuristic",5,2026-11-07,Discord Community
+"FeedbackIQ has transformed our weekly product reviews. The clustering is spot on!",5,2026-11-08,App Store Review
+"Saved our customer ops team 12 hours every week on feedback categorization",5,2026-11-08,Email
+"The AI chatbot answered our exec questions with exact supporting customer quotes. Brilliant!",5,2026-11-08,Web App
+"Super clean dashboard design. Beautiful charts and lightning-fast sentiment analysis",5,2026-11-08,Web App
+"The automated theme prioritization helped us fix our critical onboarding bugs in 48 hours",5,2026-11-08,Support Ticket
