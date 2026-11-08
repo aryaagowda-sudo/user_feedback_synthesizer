@@ -18,8 +18,9 @@ from backend.database.db import DatabaseClient, is_valid_uuid, db
 class TestSupabaseIntegration(unittest.TestCase):
     def setUp(self):
         self.db = DatabaseClient()
-        self.test_user_id = str(uuid.uuid4())
-        self.other_user_id = str(uuid.uuid4())
+        self.test_user_id = None
+        self.mock_user_id_1 = str(uuid.uuid4())
+        self.mock_user_id_2 = str(uuid.uuid4())
 
     def test_01_system_status_and_dual_mode(self):
         """Verify system status reports valid mode and connectivity attributes."""
@@ -153,29 +154,33 @@ class TestSupabaseIntegration(unittest.TestCase):
 
     def test_06_user_data_isolation(self):
         """Verify user history filtering isolates sessions by user_id."""
-        id_1 = self.db.create_analysis_session(
+        local_db = DatabaseClient()
+        local_db.use_supabase = False
+        local_db.supabase = None
+
+        id_1 = local_db.create_analysis_session(
             analysis_name="User 1 Private Session",
             feedback_records=[{"feedback_text": "Secret 1", "sentiment": "Positive", "confidence": 0.9}],
             themes=[],
-            user_id=self.test_user_id
+            user_id=self.mock_user_id_1
         )
 
-        id_2 = self.db.create_analysis_session(
+        id_2 = local_db.create_analysis_session(
             analysis_name="User 2 Private Session",
             feedback_records=[{"feedback_text": "Secret 2", "sentiment": "Positive", "confidence": 0.9}],
             themes=[],
-            user_id=self.other_user_id
+            user_id=self.mock_user_id_2
         )
 
         # User 1 history should not include User 2
-        user_1_hist = self.db.get_history(user_id=self.test_user_id)
+        user_1_hist = local_db.get_history(user_id=self.mock_user_id_1)
         user_1_ids = [h["id"] for h in user_1_hist]
         self.assertIn(id_1, user_1_ids)
         self.assertNotIn(id_2, user_1_ids)
 
         # Clean up
-        self.db.delete_analysis(id_1, user_id=self.test_user_id)
-        self.db.delete_analysis(id_2, user_id=self.other_user_id)
+        local_db.delete_analysis(id_1, user_id=self.mock_user_id_1)
+        local_db.delete_analysis(id_2, user_id=self.mock_user_id_2)
 
 
 if __name__ == "__main__":

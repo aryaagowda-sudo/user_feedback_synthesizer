@@ -6,7 +6,16 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 from dotenv import load_dotenv
 
+# Ensure Python trusts Windows system certificates (e.g. for antivirus shields/proxies)
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except Exception:
+    pass
+
 load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 logger = logging.getLogger("feedbackiq.db")
 
@@ -231,12 +240,13 @@ class DatabaseClient:
                         "theme_name": t.get("theme_name") or t.get("name", "General"),
                         "summary": t.get("ai_summary") or t.get("summary", ""),
                         "mention_count": t.get("mention_count", 0),
-                        "positive_percentage": float(t.get("positive_percentage", 0.0)),
-                        "negative_percentage": float(t.get("negative_percentage", 0.0)),
-                        "neutral_percentage": float(t.get("neutral_percentage", 0.0)),
+                        "positive_percentage": float(t.get("positive_percentage") or (t.get("sentiment_distribution", {}).get("Positive") if isinstance(t.get("sentiment_distribution"), dict) else 0.0)),
+                        "negative_percentage": float(t.get("negative_percentage") or (t.get("sentiment_distribution", {}).get("Negative") if isinstance(t.get("sentiment_distribution"), dict) else 0.0)),
+                        "neutral_percentage": float(t.get("neutral_percentage") or (t.get("sentiment_distribution", {}).get("Neutral") if isinstance(t.get("sentiment_distribution"), dict) else 0.0)),
                         "severity": t.get("severity", "Medium"),
                         "priority": t.get("priority") or t.get("priority_level", "Medium"),
-                        "recommendation": t.get("recommendation") or t.get("suggested_action", ""),
+                        "priority_score": float(t.get("priority_score", 0.0)),
+                        "recommendation": t.get("recommendation") or t.get("suggested_action") or t.get("recommended_action", ""),
                         "main_complaint": t.get("main_complaint", ""),
                         "is_feature_request": bool(t.get("is_feature_request", False)),
                         "key_observations": t.get("key_observations", []),
@@ -257,7 +267,7 @@ class DatabaseClient:
                         "id": f_id,
                         "analysis_id": analysis_id,
                         "user_id": valid_user_id,
-                        "feedback_text": f.get("feedback_text", ""),
+                        "feedback_text": f.get("feedback_text") or f.get("feedback") or f.get("text", ""),
                         "sentiment": f.get("sentiment", "Neutral"),
                         "sentiment_confidence": float(f.get("confidence") or f.get("sentiment_confidence") or 0.85),
                         "theme_id": f.get("theme_id"),

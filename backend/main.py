@@ -2,6 +2,14 @@ import os
 import csv
 import logging
 from contextlib import asynccontextmanager
+
+# Ensure Python trusts Windows system certificates (e.g. for antivirus shields/proxies)
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except Exception:
+    pass
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.api.routes import router, run_nlp_pipeline_sync

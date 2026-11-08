@@ -1,13 +1,19 @@
 -- ====================================================================
 -- FeedbackIQ — User Feedback Synthesizer
--- Supabase PostgreSQL Schema, Relational Integrity & RLS Policies
+-- Schema: schema.sql (Supabase PostgreSQL Initialization)
+-- Description: Complete initial database schema for Supabase PostgreSQL.
+-- Includes: profiles, analyses, feedback, themes, analysis_history,
+-- foreign keys with CASCADE delete, indexes, and Row Level Security (RLS).
 -- ====================================================================
 
--- 1. Enable Extensions
+-- Enable UUID & cryptographic extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- 2. Profiles Table (User accounts linked to Supabase Auth)
+-- ====================================================================
+-- 1. PROFILES TABLE
+-- Linked to Supabase Auth (auth.users)
+-- ====================================================================
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     email TEXT UNIQUE NOT NULL,
@@ -15,21 +21,26 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- Enable RLS on profiles
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view their own profile"
-    ON public.profiles FOR SELECT
+-- Profiles RLS Policies
+DROP POLICY IF EXISTS "Users can view their own profile" ON public.profiles;
+CREATE POLICY "Users can view their own profile" 
+    ON public.profiles FOR SELECT 
     USING (auth.uid() = id);
 
-CREATE POLICY "Users can insert their own profile"
-    ON public.profiles FOR INSERT
+DROP POLICY IF EXISTS "Users can insert their own profile" ON public.profiles;
+CREATE POLICY "Users can insert their own profile" 
+    ON public.profiles FOR INSERT 
     WITH CHECK (auth.uid() = id);
 
-CREATE POLICY "Users can update their own profile"
-    ON public.profiles FOR UPDATE
+DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
+CREATE POLICY "Users can update their own profile" 
+    ON public.profiles FOR UPDATE 
     USING (auth.uid() = id);
 
--- Trigger to automatically synchronize new Supabase auth users to public.profiles
+-- Trigger to automatically create a public.profiles row when a user signs up via Supabase Auth
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -51,8 +62,10 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT OR UPDATE ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
-
--- 3. Analyses Table (Primary analysis sessions)
+-- ====================================================================
+-- 2. ANALYSES TABLE
+-- Primary master record for each analysis session run
+-- ====================================================================
 CREATE TABLE IF NOT EXISTS public.analyses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -67,26 +80,34 @@ CREATE TABLE IF NOT EXISTS public.analyses (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- Enable RLS on analyses
 ALTER TABLE public.analyses ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view their own analyses or public samples"
-    ON public.analyses FOR SELECT
+-- Analyses RLS Policies
+DROP POLICY IF EXISTS "Users can view their own analyses or public samples" ON public.analyses;
+CREATE POLICY "Users can view their own analyses or public samples" 
+    ON public.analyses FOR SELECT 
     USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'service_role');
 
-CREATE POLICY "Users can insert their own analyses"
-    ON public.analyses FOR INSERT
+DROP POLICY IF EXISTS "Users can insert their own analyses" ON public.analyses;
+CREATE POLICY "Users can insert their own analyses" 
+    ON public.analyses FOR INSERT 
     WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'service_role');
 
-CREATE POLICY "Users can update their own analyses"
-    ON public.analyses FOR UPDATE
+DROP POLICY IF EXISTS "Users can update their own analyses" ON public.analyses;
+CREATE POLICY "Users can update their own analyses" 
+    ON public.analyses FOR UPDATE 
     USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'service_role');
 
-CREATE POLICY "Users can delete their own analyses"
-    ON public.analyses FOR DELETE
+DROP POLICY IF EXISTS "Users can delete their own analyses" ON public.analyses;
+CREATE POLICY "Users can delete their own analyses" 
+    ON public.analyses FOR DELETE 
     USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'service_role');
 
-
--- 4. Analysis History Table (Historical audit log of sessions)
+-- ====================================================================
+-- 3. ANALYSIS_HISTORY TABLE
+-- Audit history and session catalog for quick retrieval
+-- ====================================================================
 CREATE TABLE IF NOT EXISTS public.analysis_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -99,22 +120,29 @@ CREATE TABLE IF NOT EXISTS public.analysis_history (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- Enable RLS on analysis_history
 ALTER TABLE public.analysis_history ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view their own history"
-    ON public.analysis_history FOR SELECT
+-- Analysis History RLS Policies
+DROP POLICY IF EXISTS "Users can view their own history" ON public.analysis_history;
+CREATE POLICY "Users can view their own history" 
+    ON public.analysis_history FOR SELECT 
     USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'service_role');
 
-CREATE POLICY "Users can insert into history"
-    ON public.analysis_history FOR INSERT
+DROP POLICY IF EXISTS "Users can insert into history" ON public.analysis_history;
+CREATE POLICY "Users can insert into history" 
+    ON public.analysis_history FOR INSERT 
     WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'service_role');
 
-CREATE POLICY "Users can delete their history"
-    ON public.analysis_history FOR DELETE
+DROP POLICY IF EXISTS "Users can delete their history" ON public.analysis_history;
+CREATE POLICY "Users can delete their history" 
+    ON public.analysis_history FOR DELETE 
     USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'service_role');
 
-
--- 5. Themes Table (Clustered Topics & AI Summaries)
+-- ====================================================================
+-- 4. THEMES TABLE
+-- Clustered feedback topics, metrics, AI summaries, and recommendations
+-- ====================================================================
 CREATE TABLE IF NOT EXISTS public.themes (
     id TEXT NOT NULL,
     analysis_id UUID REFERENCES public.analyses(id) ON DELETE CASCADE,
@@ -127,6 +155,7 @@ CREATE TABLE IF NOT EXISTS public.themes (
     neutral_percentage FLOAT DEFAULT 0.0,
     severity TEXT DEFAULT 'Medium', -- 'Critical', 'High', 'Medium', 'Low'
     priority TEXT DEFAULT 'Medium', -- 'Critical', 'High', 'Medium', 'Low'
+    priority_score FLOAT DEFAULT 0.0,
     recommendation TEXT,
     main_complaint TEXT,
     is_feature_request BOOLEAN DEFAULT FALSE,
@@ -136,22 +165,29 @@ CREATE TABLE IF NOT EXISTS public.themes (
     PRIMARY KEY (analysis_id, id)
 );
 
+-- Enable RLS on themes
 ALTER TABLE public.themes ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view themes from their own analyses"
-    ON public.themes FOR SELECT
+-- Themes RLS Policies
+DROP POLICY IF EXISTS "Users can view themes from their own analyses" ON public.themes;
+CREATE POLICY "Users can view themes from their own analyses" 
+    ON public.themes FOR SELECT 
     USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'service_role');
 
-CREATE POLICY "Users can insert themes for their analyses"
-    ON public.themes FOR INSERT
+DROP POLICY IF EXISTS "Users can insert themes for their analyses" ON public.themes;
+CREATE POLICY "Users can insert themes for their analyses" 
+    ON public.themes FOR INSERT 
     WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'service_role');
 
-CREATE POLICY "Users can delete their own themes"
-    ON public.themes FOR DELETE
+DROP POLICY IF EXISTS "Users can delete their own themes" ON public.themes;
+CREATE POLICY "Users can delete their own themes" 
+    ON public.themes FOR DELETE 
     USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'service_role');
 
-
--- 6. Feedback Table (Individual customer feedback entries)
+-- ====================================================================
+-- 5. FEEDBACK TABLE
+-- Granular feedback submissions with sentiment & theme classification
+-- ====================================================================
 CREATE TABLE IF NOT EXISTS public.feedback (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     analysis_id UUID REFERENCES public.analyses(id) ON DELETE CASCADE,
@@ -166,22 +202,29 @@ CREATE TABLE IF NOT EXISTS public.feedback (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- Enable RLS on feedback
 ALTER TABLE public.feedback ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view feedback from their own analyses"
-    ON public.feedback FOR SELECT
+-- Feedback RLS Policies
+DROP POLICY IF EXISTS "Users can view feedback from their own analyses" ON public.feedback;
+CREATE POLICY "Users can view feedback from their own analyses" 
+    ON public.feedback FOR SELECT 
     USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'service_role');
 
-CREATE POLICY "Users can insert feedback records"
-    ON public.feedback FOR INSERT
+DROP POLICY IF EXISTS "Users can insert feedback records" ON public.feedback;
+CREATE POLICY "Users can insert feedback records" 
+    ON public.feedback FOR INSERT 
     WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'service_role');
 
-CREATE POLICY "Users can delete feedback from their analyses"
-    ON public.feedback FOR DELETE
+DROP POLICY IF EXISTS "Users can delete feedback from their analyses" ON public.feedback;
+CREATE POLICY "Users can delete feedback from their analyses" 
+    ON public.feedback FOR DELETE 
     USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'service_role');
 
-
--- 7. High-Performance Query Indexes
+-- ====================================================================
+-- 6. HIGH-PERFORMANCE INDEXES
+-- Optimized for fast filtering, aggregation, and cascade lookups
+-- ====================================================================
 CREATE INDEX IF NOT EXISTS idx_analyses_user_id ON public.analyses(user_id);
 CREATE INDEX IF NOT EXISTS idx_analyses_created_at ON public.analyses(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_analysis_history_analysis_id ON public.analysis_history(analysis_id);
