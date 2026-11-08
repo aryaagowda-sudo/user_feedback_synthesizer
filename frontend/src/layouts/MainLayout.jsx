@@ -29,16 +29,17 @@ export default function MainLayout({ currentTab, onTabChange, children }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [systemHealth, setSystemHealth] = useState({ online: true, mode: 'Local Mode', records: 30 });
+  const [systemHealth, setSystemHealth] = useState({ online: true, mode: 'Local Storage (JSON)', records: 0, connected: false });
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    api.getHealth()
+    api.getSystemStatus()
       .then(res => {
         setSystemHealth({
           online: true,
-          mode: res.mode || 'Local Mode',
-          records: res.records_count || 0
+          mode: res.connected ? 'Supabase PostgreSQL' : (res.mode || 'Local Storage (JSON)'),
+          records: res.records_count || 0,
+          connected: Boolean(res.connected)
         });
       })
       .catch(() => {
@@ -275,8 +276,14 @@ export default function MainLayout({ currentTab, onTabChange, children }) {
           {/* Right Header Actions */}
           <div className="flex items-center gap-3">
             {/* Database / Environment Badge */}
-            <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-[#0E131F] border border-border-muted text-xs">
-              <span className={`w-1.5 h-1.5 rounded-full ${systemHealth.online ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+            <div 
+              title={systemHealth.connected ? 'Active database: Supabase PostgreSQL (Remote Cloud)' : 'Active database: Local JSON storage (Local Dev Mode)'}
+              className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-[#0E131F] border border-border-muted text-xs cursor-default"
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${
+                !systemHealth.online ? 'bg-rose-400' :
+                systemHealth.connected ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]' : 'bg-amber-400'
+              }`} />
               <span className="text-slate-300 font-medium text-[11px]">{systemHealth.mode}</span>
               <span className="text-slate-600">|</span>
               <span className="text-slate-400 font-mono text-[11px]">{systemHealth.records} items</span>

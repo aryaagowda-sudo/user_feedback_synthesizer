@@ -1,6 +1,6 @@
 {
   "model_id": "test_category_model",
-  "created_at": "2026-11-08T16:12:17.699625",
+  "created_at": "2026-11-08T17:09:40.555595",
   "champion_model": "Transformer Embeddings + MLP (Neural)",
   "champion_type": "transformer_neural",
   "champion_selection_reason": "Transformer Neural achieved superior Macro F1 (0.4583 vs 0.0417).",
@@ -11,7 +11,7 @@
       "macro_f1": 0.0417,
       "weighted_f1": 0.0667,
       "train_time_sec": 0.004,
-      "infer_latency_ms": 0.114,
+      "infer_latency_ms": 0.107,
       "confusion_matrix": [
         [
           0,
@@ -100,8 +100,8 @@
       "accuracy": 0.8,
       "macro_f1": 0.4583,
       "weighted_f1": 0.7333,
-      "train_time_sec": 10.441,
-      "infer_latency_ms": 0.119,
+      "train_time_sec": 38.683,
+      "infer_latency_ms": 0.32,
       "confusion_matrix": [
         [
           1,

@@ -53,9 +53,38 @@
         "lr": 3e-05
       },
       "dataset_id": "test_ds"
+    },
+    {
+      "model_id": "cand_test_v2",
+      "model_name": "Test Model v2",
+      "model_type": "sentiment_transformer",
+      "version": "v4.0.0-production",
+      "status": "archived",
+      "created_at": "2026-11-08T17:09:40.565106",
+      "metrics": {
+        "macro_f1": 0.91,
+        "accuracy": 0.92
+      },
+      "hyperparameters": {
+        "lr": 3e-05
+      },
+      "dataset_id": "test_ds"
     }
   ],
   "retraining_history": [
+    {
+      "timestamp": "2026-11-08T17:09:40.579370",
+      "action": "rollback",
+      "reinstated_model_id": "distilbert_sst2_pretrained",
+      "rolled_back_from": "cand_test_v2"
+    },
+    {
+      "timestamp": "2026-11-08T17:09:40.575504",
+      "action": "promotion",
+      "promoted_model_id": "cand_test_v2",
+      "demoted_model_id": "distilbert_sst2_pretrained",
+      "forced": false
+    },
     {
       "timestamp": "2026-11-08T16:12:17.708488",
       "action": "rollback",

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { supabase } from './supabase';
 
 // Vite proxy forwards /api -> http://localhost:8000
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
@@ -9,6 +10,25 @@ export const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+// Request interceptor to attach Supabase JWT auth token and user ID
+apiClient.interceptors.request.use(async (config) => {
+  try {
+    if (supabase) {
+      const { data } = await supabase.auth.getSession();
+      const session = data?.session;
+      if (session?.access_token) {
+        config.headers['Authorization'] = `Bearer ${session.access_token}`;
+        if (session.user?.id) {
+          config.headers['X-User-Id'] = session.user.id;
+        }
+      }
+    }
+  } catch (err) {
+    // Continue with unauthenticated / guest request
+  }
+  return config;
 });
 
 // Response interceptor for clear, clean error handling
@@ -22,8 +42,9 @@ apiClient.interceptors.response.use(
 );
 
 export const api = {
-  // Health & Status
+  // Health & System Connectivity Status
   getHealth: () => apiClient.get('/'),
+  getSystemStatus: () => apiClient.get('/system/status'),
 
   // Real-time Background Job Polling
   getAnalysisStatus: (jobId) => apiClient.get(`/analysis-status/${jobId}`),

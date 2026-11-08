@@ -314,6 +314,79 @@ To run the schema:
 
 ---
 
+## 🗄️ Supabase PostgreSQL Integration Guide
+
+FeedbackIQ provides a complete enterprise database integration with **Supabase PostgreSQL** and **Supabase Auth**, along with an automatic zero-config **Local Development Mode**.
+
+### 1. Database Architecture & Tables
+The database includes 5 core relational tables with foreign keys and cascading deletes:
+- **`profiles`**: User accounts automatically synced from `auth.users` via trigger (`id`, `email`, `full_name`, `created_at`).
+- **`analyses`**: Primary analysis session master records (`id UUID`, `user_id`, `analysis_name`, `total_feedback`, `positive_count`, `negative_count`, `neutral_count`, `positive_percentage`, `negative_percentage`, `neutral_percentage`, `created_at`).
+- **`feedback`**: Granular customer feedback records linked to analysis sessions (`id UUID`, `analysis_id UUID`, `user_id`, `feedback_text`, `sentiment`, `sentiment_confidence`, `theme_id`, `source`, `rating`, `date`, `created_at`).
+- **`themes`**: Identified semantic clusters, AI summaries, and priority scores (`id`, `analysis_id UUID`, `user_id`, `theme_name`, `summary`, `mention_count`, `positive_percentage`, `negative_percentage`, `neutral_percentage`, `severity`, `priority`, `recommendation`, `main_complaint`, `is_feature_request`, `key_observations`, `representative_feedback`, `created_at`).
+- **`analysis_history`**: Historical audit log of all completed runs (`id UUID`, `user_id`, `analysis_id UUID`, `analysis_name`, `total_feedback`, `positive_percentage`, `negative_percentage`, `neutral_percentage`, `created_at`).
+
+### 2. Row Level Security (RLS) & Multi-Tenant Isolation
+Every table is locked down with Row Level Security:
+- Users can view, insert, update, and delete **strictly their own data** (`auth.uid() = user_id`).
+- Public sample datasets (`user_id IS NULL`) are safely accessible in read-only guest mode.
+- Administrative operations with the `service_role` key bypass RLS securely on the backend only.
+- **Security Rule:** Never put the `SUPABASE_SERVICE_ROLE_KEY` in the frontend!
+
+### 3. Setup Instructions in Supabase Console
+1. Log in to [supabase.com](https://supabase.com) and create or select your project.
+2. In the Supabase left sidebar, click **SQL Editor** -> **New Query**.
+3. Copy and paste the entire contents of [`backend/database/schema.sql`](file:///c:/Users/aryaa/OneDrive/Desktop/user_feedback/backend/database/schema.sql) and click **Run**.
+4. Go to **Project Settings** -> **API** to copy your credentials:
+   - **Project URL** -> `SUPABASE_URL` / `VITE_SUPABASE_URL`
+   - **anon / public key** -> `VITE_SUPABASE_ANON_KEY`
+   - **service_role key** (secret) -> `SUPABASE_SERVICE_ROLE_KEY` (backend only)
+
+### 4. Environment Variables Configuration
+
+**Backend (`backend/.env`):**
+```bash
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+PORT=8000
+HOST=0.0.0.0
+```
+
+**Frontend (`frontend/.env`):**
+```bash
+VITE_SUPABASE_URL=https://your-project-id.supabase.co
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+VITE_API_URL=http://localhost:8000
+```
+
+### 5. Seamless Dual-Mode Operation
+- **Connected Mode:** When valid Supabase credentials are configured in `.env`, FeedbackIQ automatically connects to Supabase PostgreSQL, creating sessions and persisting all feedback, themes, and summaries remotely. The top navigation bar displays a green indicator: `Supabase PostgreSQL`.
+- **Local Dev Mode:** When credentials are omitted or offline, FeedbackIQ automatically operates in zero-config local file store mode (`backend/data/local_db.json`). The top navigation bar displays an amber indicator: `Local Storage (JSON)`.
+
+---
+
+## 🚀 Running FeedbackIQ Locally (Windows)
+
+Open two PowerShell windows:
+
+### Window 1: FastAPI Backend
+```powershell
+cd c:\Users\aryaa\OneDrive\Desktop\user_feedback
+py -3.13 -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+```
+*The backend pre-warms DistilBERT & SentenceTransformers and starts on `http://127.0.0.1:8000`.*
+
+### Window 2: React + Vite Frontend
+```powershell
+cd c:\Users\aryaa\OneDrive\Desktop\user_feedback
+npm --prefix frontend run dev
+```
+*The Vite frontend starts on `http://localhost:5173`.*
+
+Open your browser to `http://localhost:5173`.
+
+---
+
 ## 🤖 AI Feedback Copilot Sample Questions
 
 The Copilot chatbot is accessible via the **AI Copilot** navigation tab or top header shortcut:

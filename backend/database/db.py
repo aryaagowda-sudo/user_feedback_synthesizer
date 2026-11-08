@@ -11,19 +11,33 @@ load_dotenv()
 logger = logging.getLogger("feedbackiq.db")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", os.getenv("VITE_SUPABASE_URL", "")).strip()
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", os.getenv("SUPABASE_KEY", os.getenv("SUPABASE_ANON_KEY", ""))).strip()
+# Use Service Role Key on backend if available for administrative RLS bypass, otherwise Anon Key
+SUPABASE_KEY = (
+    os.getenv("SUPABASE_SERVICE_ROLE_KEY") or 
+    os.getenv("SUPABASE_KEY") or 
+    os.getenv("VITE_SUPABASE_ANON_KEY") or 
+    os.getenv("SUPABASE_ANON_KEY", "")
+).strip()
 
 LOCAL_STORAGE_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "local_db.json")
 
+
+def is_valid_uuid(val: Any) -> bool:
+    """Checks whether a string or value is a valid UUID."""
+    if not val or not isinstance(val, str):
+        return False
+    try:
+        uuid.UUID(val)
+        return True
+    except (ValueError, AttributeError):
+        return False
+
+
 class DatabaseClient:
     def __init__(self):
-        self.use_supabase = bool(
-            SUPABASE_URL and 
-            SUPABASE_KEY and 
-            not SUPABASE_URL.startswith("your_") and 
-            not SUPABASE_KEY.startswith("your_")
-        )
         self.supabase = None
+        self.use_supabase = False
+        self.mode = "Local Storage (JSON)"
         self._local_data: Dict[str, Any] = {
             "active_analysis_id": None,
             "analysis_history": [],
@@ -33,17 +47,40 @@ class DatabaseClient:
         self._init_storage()
 
     def _init_storage(self):
+        """Initializes database connection to Supabase or sets up local JSON store."""
         os.makedirs(os.path.dirname(LOCAL_STORAGE_PATH), exist_ok=True)
-        if self.use_supabase:
+
+        has_creds = bool(
+            SUPABASE_URL and 
+            SUPABASE_KEY and 
+            not SUPABASE_URL.startswith("https://your-") and 
+            not SUPABASE_URL.startswith("your_") and
+            not SUPABASE_KEY.startswith("your_")
+        )
+
+        if has_creds:
             try:
                 from supabase import create_client
-                self.supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-                logger.info("Connected successfully to Supabase PostgreSQL.")
+                client = create_client(SUPABASE_URL, SUPABASE_KEY)
+                # Test connection by making a lightweight read
+                _ = client.table("analyses").select("id").limit(1).execute()
+                self.supabase = client
+                self.use_supabase = True
+                self.mode = "Supabase PostgreSQL"
+                logger.info("Successfully connected to Supabase PostgreSQL.")
             except Exception as e:
-                logger.warning(f"Supabase initialization error ({e}), operating in local JSON mode.")
+                # If table doesn't exist yet or connection fails, log friendly notice
+                logger.warning(
+                    f"Supabase connection notice: {e}. Falling back to Local Storage mode."
+                )
                 self.use_supabase = False
+                self.mode = "Local Storage (JSON)"
+        else:
+            logger.info("No remote Supabase credentials supplied; running in Local Storage mode.")
+            self.use_supabase = False
+            self.mode = "Local Storage (JSON)"
 
-        # Load local storage as fallback and cache
+        # Initialize local JSON cache/fallback
         self._last_mtime = 0
         if os.path.exists(LOCAL_STORAGE_PATH):
             try:
@@ -65,8 +102,8 @@ class DatabaseClient:
             self._save_local()
 
     def _sync_local_data(self):
-        """Reloads JSON from disk if another process updated it."""
-        if not self.use_supabase and os.path.exists(LOCAL_STORAGE_PATH):
+        """Reloads JSON from disk if another background thread or process updated it."""
+        if os.path.exists(LOCAL_STORAGE_PATH):
             try:
                 mtime = os.path.getmtime(LOCAL_STORAGE_PATH)
                 if getattr(self, "_last_mtime", 0) < mtime:
@@ -77,6 +114,7 @@ class DatabaseClient:
                 pass
 
     def _save_local(self):
+        """Saves current state to local JSON file."""
         try:
             with open(LOCAL_STORAGE_PATH, "w", encoding="utf-8") as f:
                 json.dump(self._local_data, f, indent=2, default=str)
@@ -85,8 +123,22 @@ class DatabaseClient:
         except Exception as e:
             logger.error(f"Failed to persist local database: {e}")
 
+    def get_system_status(self) -> Dict[str, Any]:
+        """Returns active database operational metadata and record counts."""
+        self._sync_local_data()
+        return {
+            "online": True,
+            "mode": self.mode,
+            "database_type": "supabase" if self.use_supabase else "local",
+            "connected": self.use_supabase,
+            "active_analysis_id": self._local_data.get("active_analysis_id"),
+            "records_count": len(self.get_all_feedback()),
+            "themes_count": len(self.get_themes()),
+            "analyses_count": len(self.get_history())
+        }
+
     # ==========================================================
-    # ANALYSIS HISTORY OPERATIONS
+    # ANALYSIS HISTORY & PERSISTENCE OPERATIONS
     # ==========================================================
     def create_analysis_session(
         self, 
@@ -95,88 +147,142 @@ class DatabaseClient:
         themes: List[Dict[str, Any]], 
         user_id: Optional[str] = None
     ) -> str:
-        """Saves a new analysis session and links all feedback and themes."""
-        analysis_id = f"analysis_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+        """
+        Persists a complete analysis session:
+        1. Generates a standard UUID for the analysis session.
+        2. Persists to 'analyses' and 'analysis_history' tables.
+        3. Persists all themes and AI summaries.
+        4. Persists all labeled feedback records.
+        5. Synchronizes local storage cache so dashboard and explorer reflect changes instantly.
+        """
+        analysis_id = str(uuid.uuid4())
         total = len(feedback_records)
         pos = sum(1 for it in feedback_records if it.get("sentiment") == "Positive")
         neg = sum(1 for it in feedback_records if it.get("sentiment") == "Negative")
         neu = sum(1 for it in feedback_records if it.get("sentiment") == "Neutral")
 
-        session_record = {
+        pos_pct = round((pos / total) * 100, 1) if total > 0 else 0.0
+        neg_pct = round((neg / total) * 100, 1) if total > 0 else 0.0
+        neu_pct = round((neu / total) * 100, 1) if total > 0 else 0.0
+        now_iso = datetime.utcnow().isoformat()
+
+        # Clean user_id (must be valid UUID for Postgres public.profiles foreign key, else None)
+        valid_user_id = user_id if is_valid_uuid(user_id) else None
+
+        # Analysis Master Record
+        analysis_record = {
             "id": analysis_id,
-            "user_id": user_id,
+            "user_id": valid_user_id,
             "analysis_name": analysis_name,
             "total_feedback": total,
             "positive_count": pos,
             "negative_count": neg,
             "neutral_count": neu,
-            "positive_percentage": round((pos / total) * 100, 1) if total > 0 else 0.0,
-            "negative_percentage": round((neg / total) * 100, 1) if total > 0 else 0.0,
-            "neutral_percentage": round((neu / total) * 100, 1) if total > 0 else 0.0,
-            "themes_count": len(themes),
-            "created_at": datetime.utcnow().isoformat()
+            "positive_percentage": pos_pct,
+            "negative_percentage": neg_pct,
+            "neutral_percentage": neu_pct,
+            "created_at": now_iso
         }
 
-        # Tag feedback and themes with analysis_id and user_id
+        # Analysis History Audit Record
+        history_record = {
+            "id": str(uuid.uuid4()),
+            "analysis_id": analysis_id,
+            "user_id": valid_user_id,
+            "analysis_name": analysis_name,
+            "total_feedback": total,
+            "positive_percentage": pos_pct,
+            "negative_percentage": neg_pct,
+            "neutral_percentage": neu_pct,
+            "created_at": now_iso
+        }
+
+        # Tag feedback records with session IDs
         for it in feedback_records:
             it["analysis_id"] = analysis_id
-            if user_id:
-                it["user_id"] = user_id
+            if valid_user_id:
+                it["user_id"] = valid_user_id
 
+        # Tag themes with session IDs
         for t in themes:
             t["analysis_id"] = analysis_id
-            if user_id:
-                t["user_id"] = user_id
+            if valid_user_id:
+                t["user_id"] = valid_user_id
 
-        # Supabase Persistence
+        # ----------------------------------------------------------
+        # Persist to Supabase if connected
+        # ----------------------------------------------------------
         if self.use_supabase and self.supabase:
             try:
-                self.supabase.table("analysis_history").insert(session_record).execute()
-                
-                # Insert themes
+                # 1. Insert into 'analyses'
+                self.supabase.table("analyses").insert(analysis_record).execute()
+
+                # 2. Insert into 'analysis_history'
+                self.supabase.table("analysis_history").insert(history_record).execute()
+
+                # 3. Clean and insert themes
                 clean_themes = []
                 for t in themes:
-                    ct = {
-                        "id": t["id"],
+                    t_id = str(t.get("id") or f"theme_{uuid.uuid4().hex[:6]}")
+                    clean_themes.append({
+                        "id": t_id,
                         "analysis_id": analysis_id,
-                        "user_id": user_id,
-                        "theme_name": t.get("theme_name") or t.get("name", "Unknown"),
+                        "user_id": valid_user_id,
+                        "theme_name": t.get("theme_name") or t.get("name", "General"),
                         "summary": t.get("ai_summary") or t.get("summary", ""),
                         "mention_count": t.get("mention_count", 0),
-                        "positive_percentage": t.get("positive_percentage", 0.0),
-                        "negative_percentage": t.get("negative_percentage", 0.0),
-                        "neutral_percentage": t.get("neutral_percentage", 0.0),
-                        "severity": t.get("severity", "Low"),
+                        "positive_percentage": float(t.get("positive_percentage", 0.0)),
+                        "negative_percentage": float(t.get("negative_percentage", 0.0)),
+                        "neutral_percentage": float(t.get("neutral_percentage", 0.0)),
+                        "severity": t.get("severity", "Medium"),
                         "priority": t.get("priority") or t.get("priority_level", "Medium"),
                         "recommendation": t.get("recommendation") or t.get("suggested_action", ""),
                         "main_complaint": t.get("main_complaint", ""),
+                        "is_feature_request": bool(t.get("is_feature_request", False)),
                         "key_observations": t.get("key_observations", []),
                         "representative_feedback": t.get("representative_feedback") or t.get("representative_comments", [])
-                    }
-                    clean_themes.append(ct)
-                self.supabase.table("themes").insert(clean_themes).execute()
+                    })
+                if clean_themes:
+                    self.supabase.table("themes").insert(clean_themes).execute()
 
-                # Insert feedback
+                # 4. Clean and insert feedback records in batches
                 clean_feedback = []
                 for f in feedback_records:
-                    cf = {
-                        "id": f["id"],
-                        "user_id": user_id,
+                    f_id = f.get("id")
+                    if not is_valid_uuid(f_id):
+                        f_id = str(uuid.uuid4())
+                        f["id"] = f_id
+
+                    clean_feedback.append({
+                        "id": f_id,
                         "analysis_id": analysis_id,
-                        "feedback_text": f["feedback_text"],
-                        "sentiment": f["sentiment"],
-                        "sentiment_confidence": float(f.get("confidence") or f.get("sentiment_confidence") or 0.9),
+                        "user_id": valid_user_id,
+                        "feedback_text": f.get("feedback_text", ""),
+                        "sentiment": f.get("sentiment", "Neutral"),
+                        "sentiment_confidence": float(f.get("confidence") or f.get("sentiment_confidence") or 0.85),
                         "theme_id": f.get("theme_id"),
                         "source": f.get("source", "Web App"),
-                        "rating": f.get("rating")
-                    }
-                    clean_feedback.append(cf)
-                self.supabase.table("feedback").insert(clean_feedback).execute()
-            except Exception as e:
-                logger.warning(f"Failed inserting analysis into Supabase ({e}), persisting locally.")
+                        "rating": int(f["rating"]) if f.get("rating") is not None and str(f.get("rating")).isdigit() else None,
+                        "date": str(f.get("date", "")),
+                        "created_at": now_iso
+                    })
 
-        # Local storage persistence
-        self._local_data["analysis_history"].insert(0, session_record)
+                # Batch insert feedback (200 records at a time)
+                batch_size = 200
+                for i in range(0, len(clean_feedback), batch_size):
+                    chunk = clean_feedback[i : i + batch_size]
+                    self.supabase.table("feedback").insert(chunk).execute()
+
+                logger.info(f"Persisted analysis {analysis_id} with {len(clean_feedback)} feedback items to Supabase.")
+            except Exception as e:
+                logger.warning(f"Supabase persistence error ({e}), ensuring local JSON persistence.")
+
+        # ----------------------------------------------------------
+        # Persist to Local Storage Cache
+        # ----------------------------------------------------------
+        local_session_entry = dict(analysis_record)
+        local_session_entry["themes_count"] = len(themes)
+        self._local_data["analysis_history"].insert(0, local_session_entry)
         self._local_data["active_analysis_id"] = analysis_id
         self._local_data["themes"] = themes
         self._local_data["feedback"] = feedback_records
@@ -185,18 +291,20 @@ class DatabaseClient:
         return analysis_id
 
     def get_history(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Returns list of previous analyses."""
+        """Returns list of past analysis sessions (scoped to user_id if provided)."""
         self._sync_local_data()
+
         if self.use_supabase and self.supabase:
             try:
-                query = self.supabase.table("analysis_history").select("*").order("created_at", desc=True)
-                if user_id:
-                    query = query.eq("user_id", user_id)
+                # Query analyses table
+                query = self.supabase.table("analyses").select("*").order("created_at", desc=True)
+                if user_id and is_valid_uuid(user_id):
+                    query = query.or_(f"user_id.eq.{user_id},user_id.is.null")
                 res = query.execute()
                 if res.data:
                     return res.data
             except Exception as e:
-                logger.warning(f"Supabase get_history failed ({e}), loading local.")
+                logger.warning(f"Supabase get_history failed ({e}), loading from local store.")
 
         hist = self._local_data.get("analysis_history", [])
         if user_id:
@@ -204,10 +312,10 @@ class DatabaseClient:
         return hist
 
     def get_analysis_by_id(self, analysis_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieves themes and feedback for a specific analysis session."""
+        """Retrieves session metadata, themes, and feedback for a specific analysis ID."""
         if self.use_supabase and self.supabase:
             try:
-                hist_res = self.supabase.table("analysis_history").select("*").eq("id", analysis_id).execute()
+                hist_res = self.supabase.table("analyses").select("*").eq("id", analysis_id).execute()
                 themes_res = self.supabase.table("themes").select("*").eq("analysis_id", analysis_id).execute()
                 feedback_res = self.supabase.table("feedback").select("*").eq("analysis_id", analysis_id).execute()
                 if hist_res.data:
@@ -217,19 +325,18 @@ class DatabaseClient:
                         "feedback": feedback_res.data or []
                     }
             except Exception as e:
-                logger.warning(f"Supabase get_analysis_by_id error ({e}), checking local storage.")
+                logger.warning(f"Supabase get_analysis_by_id failed ({e}), checking local store.")
 
-        # Check local storage
+        # Local fallback
+        self._sync_local_data()
         session = next((h for h in self._local_data.get("analysis_history", []) if h["id"] == analysis_id), None)
         if session:
-            # If active, get directly
             if self._local_data.get("active_analysis_id") == analysis_id:
                 return {
                     "session": session,
                     "themes": self._local_data.get("themes", []),
                     "feedback": self._local_data.get("feedback", [])
                 }
-            # Or filter from feedback/themes
             matched_fb = [f for f in self._local_data.get("feedback", []) if f.get("analysis_id") == analysis_id]
             matched_themes = [t for t in self._local_data.get("themes", []) if t.get("analysis_id") == analysis_id]
             return {
@@ -240,7 +347,7 @@ class DatabaseClient:
         return None
 
     def activate_analysis(self, analysis_id: str) -> bool:
-        """Switches active analysis session to the specified ID."""
+        """Switches the active analysis session in memory and local store."""
         data = self.get_analysis_by_id(analysis_id)
         if not data:
             return False
@@ -248,25 +355,29 @@ class DatabaseClient:
         self._local_data["themes"] = data["themes"]
         self._local_data["feedback"] = data["feedback"]
         self._save_local()
+        logger.info(f"Activated analysis session {analysis_id}.")
         return True
 
     def delete_analysis(self, analysis_id: str, user_id: Optional[str] = None) -> bool:
-        """Deletes an analysis session and associated themes and feedback."""
+        """Deletes an analysis session and cascades deletion of its themes and feedback."""
         if self.use_supabase and self.supabase:
             try:
-                self.supabase.table("analysis_history").delete().eq("id", analysis_id).execute()
+                # In Postgres, ON DELETE CASCADE handles child feedback, themes, and history
+                self.supabase.table("analyses").delete().eq("id", analysis_id).execute()
+                self.supabase.table("analysis_history").delete().eq("analysis_id", analysis_id).execute()
+                logger.info(f"Deleted analysis session {analysis_id} from Supabase.")
             except Exception as e:
                 logger.warning(f"Supabase delete_analysis failed ({e}).")
 
         # Local deletion
+        self._sync_local_data()
         self._local_data["analysis_history"] = [
             h for h in self._local_data.get("analysis_history", []) if h["id"] != analysis_id
         ]
         if self._local_data.get("active_analysis_id") == analysis_id:
-            # Revert to latest remaining analysis or clear
             if self._local_data["analysis_history"]:
-                latest = self._local_data["analysis_history"][0]["id"]
-                self.activate_analysis(latest)
+                next_active = self._local_data["analysis_history"][0]["id"]
+                self.activate_analysis(next_active)
             else:
                 self._local_data["active_analysis_id"] = None
                 self._local_data["themes"] = []
@@ -275,7 +386,7 @@ class DatabaseClient:
         return True
 
     # ==========================================================
-    # FEEDBACK & THEMES RETRIEVAL (ACTIVE SESSION)
+    # ACTIVE WORKSPACE DATA ACCESS
     # ==========================================================
     def get_feedback(
         self, 
@@ -287,6 +398,7 @@ class DatabaseClient:
         limit: int = 100,
         offset: int = 0
     ) -> Dict[str, Any]:
+        """Returns filtered and paginated feedback from the active workspace."""
         self._sync_local_data()
         all_items = self._local_data.get("feedback", [])
 
@@ -349,5 +461,6 @@ class DatabaseClient:
             "feedback": []
         }
         self._save_local()
+
 
 db = DatabaseClient()

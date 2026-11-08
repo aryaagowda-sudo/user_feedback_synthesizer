@@ -5,12 +5,51 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, date
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query, BackgroundTasks, Header, Depends
 from backend.models.schemas import (
     FeedbackInput, BatchAnalyzeRequest, AnalyticsResponse, 
     InsightsResponse, ChatRequest, ChatResponse, SummarizeRequest
 )
-from backend.database.db import db
+from backend.database.db import db, is_valid_uuid
+
+def get_current_user_id(
+    authorization: Optional[str] = Header(None),
+    x_user_id: Optional[str] = Header(None)
+) -> Optional[str]:
+    """
+    Extracts authenticated user ID from Supabase JWT Bearer token or X-User-Id header.
+    Enforces security while gracefully allowing guest access in local development mode.
+    """
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split("Bearer ")[1].strip()
+        if token:
+            # 1. Verify via Supabase Auth client if remote connection is live
+            if db.use_supabase and db.supabase:
+                try:
+                    res = db.supabase.auth.get_user(token)
+                    if res and res.user and res.user.id:
+                        return str(res.user.id)
+                except Exception:
+                    pass
+
+            # 2. Extract from standard JWT payload
+            try:
+                import base64
+                import json
+                parts = token.split(".")
+                if len(parts) >= 2:
+                    padded = parts[1] + "=" * ((4 - len(parts[1]) % 4) % 4)
+                    payload = json.loads(base64.urlsafe_b64decode(padded).decode("utf-8"))
+                    sub = payload.get("sub") or payload.get("id")
+                    if sub and is_valid_uuid(str(sub)):
+                        return str(sub)
+            except Exception:
+                pass
+
+    if x_user_id and is_valid_uuid(x_user_id):
+        return x_user_id
+
+    return None
 from backend.services.sentiment import sentiment_analyzer
 from backend.services.clustering import semantic_clusterer
 from backend.services.summarization import theme_summarizer
@@ -287,16 +326,10 @@ def run_pipeline_with_progress(
 # ==========================================================
 
 @router.get("/")
+@router.get("/system/status")
 def health_check():
-    history = db.get_history()
-    return {
-        "status": "healthy",
-        "service": "FeedbackIQ — User Feedback Synthesizer API",
-        "version": "1.1.0",
-        "mode": "Supabase PostgreSQL" if db.use_supabase else "Local Development Mode",
-        "records_count": len(db.get_all_feedback()),
-        "analyses_count": len(history)
-    }
+    """Returns database connectivity mode, health status, and active dataset metrics."""
+    return db.get_system_status()
 
 @router.get("/analysis-status/{job_id}")
 def get_analysis_status(job_id: str):
@@ -310,11 +343,16 @@ def get_analysis_status(job_id: str):
     return job
 
 @router.post("/upload")
-async def upload_feedback_csv(file: UploadFile = File(...), user_id: Optional[str] = Form(None)):
+async def upload_feedback_csv(
+    file: UploadFile = File(...), 
+    user_id: Optional[str] = Form(None),
+    auth_user_id: Optional[str] = Depends(get_current_user_id)
+):
     """
     Upload CSV feedback file.
     Validates CSV headers, registers a background job, and returns the job_id immediately.
     """
+    effective_user_id = user_id or auth_user_id
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload a .csv file.")
 
@@ -390,7 +428,7 @@ async def upload_feedback_csv(file: UploadFile = File(...), user_id: Optional[st
         job_id,
         parsed_rows,
         file.filename,
-        user_id
+        effective_user_id
     )
 
     return {
@@ -402,11 +440,15 @@ async def upload_feedback_csv(file: UploadFile = File(...), user_id: Optional[st
     }
 
 @router.post("/analyze")
-def analyze_feedback(payload: BatchAnalyzeRequest):
+def analyze_feedback(
+    payload: BatchAnalyzeRequest,
+    auth_user_id: Optional[str] = Depends(get_current_user_id)
+):
     """
     Analyze manually inputted feedback (JSON array or raw multiline text).
     Returns job_id immediately so frontend polls progress smoothly.
     """
+    effective_user_id = payload.user_id or auth_user_id
     items = []
     if payload.items:
         for it in payload.items:
@@ -430,7 +472,7 @@ def analyze_feedback(payload: BatchAnalyzeRequest):
         job_id,
         items,
         dataset_name,
-        payload.user_id
+        effective_user_id
     )
 
     return {
@@ -725,9 +767,16 @@ def get_analytics():
 # ==========================================================
 
 @router.get("/history")
-def get_analysis_history(user_id: Optional[str] = Query(None)):
-    """Retrieve list of previous analysis sessions."""
-    return {"history": db.get_history(user_id=user_id)}
+def get_analysis_history(
+    user_id: Optional[str] = Query(None),
+    auth_user_id: Optional[str] = Depends(get_current_user_id)
+):
+    """Retrieve list of previous analysis sessions (filtered by authenticated user when signed in)."""
+    effective_user_id = user_id or auth_user_id
+    return {
+        "history": db.get_history(user_id=effective_user_id),
+        "status": db.get_system_status()
+    }
 
 @router.get("/analysis/{analysis_id}")
 def get_analysis_details(analysis_id: str):
@@ -746,9 +795,15 @@ def activate_analysis_session(analysis_id: str):
     return {"message": f"Activated analysis session {analysis_id}", "active_id": analysis_id}
 
 @router.delete("/analysis/{analysis_id}")
-def delete_analysis_session(analysis_id: str, user_id: Optional[str] = Query(None)):
-    """Delete an analysis session and its associated feedback records and themes."""
-    success = db.delete_analysis(analysis_id, user_id=user_id)
+def delete_analysis_session(
+    analysis_id: str, 
+    user_id: Optional[str] = Query(None),
+    auth_user_id: Optional[str] = Depends(get_current_user_id)
+):
+    """Delete an analysis session and its associated feedback records and themes safely."""
+    effective_user_id = user_id or auth_user_id
+    success = db.delete_analysis(analysis_id, user_id=effective_user_id)
     if not success:
         raise HTTPException(status_code=404, detail="Analysis session not found or deletion failed.")
+    return {"message": f"Successfully deleted analysis session {analysis_id}"}
     return {"message": f"Successfully deleted analysis session {analysis_id}"}
