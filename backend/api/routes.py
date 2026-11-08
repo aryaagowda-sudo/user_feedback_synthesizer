@@ -8,7 +8,8 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query, BackgroundTasks, Header, Depends
 from backend.models.schemas import (
     FeedbackInput, BatchAnalyzeRequest, AnalyticsResponse, 
-    InsightsResponse, ChatRequest, ChatResponse, SummarizeRequest
+    InsightsResponse, ChatRequest, ChatResponse, SummarizeRequest,
+    HistoricalIntelligenceRequest
 )
 from backend.database.db import db, is_valid_uuid
 
@@ -287,6 +288,16 @@ def run_pipeline_with_progress(
             themes=clean_save_themes,
             user_id=user_id
         )
+
+        # Single compact memory retention in Hindsight (strictly guarded for credit conservation)
+        try:
+            from backend.services.hindsight_service import hindsight_service
+            if hindsight_service.is_configured():
+                analysis_detail = db.get_analysis_by_id(analysis_id)
+                if analysis_detail:
+                    hindsight_service.retain_analysis_memory(analysis_detail)
+        except Exception as he:
+            logger.warning(f"Hindsight background retention skipped/notice: {he}")
 
         result_payload = {
             "status": "success",
@@ -806,4 +817,96 @@ def delete_analysis_session(
     if not success:
         raise HTTPException(status_code=404, detail="Analysis session not found or deletion failed.")
     return {"message": f"Successfully deleted analysis session {analysis_id}"}
-    return {"message": f"Successfully deleted analysis session {analysis_id}"}
+
+
+# ==========================================================
+# HISTORICAL INTELLIGENCE & HINDSIGHT AI ENDPOINTS
+# ==========================================================
+
+@router.get("/hindsight/status")
+def get_hindsight_status():
+    """Returns Hindsight memory operational status, budget guardrails, and call counters."""
+    from backend.services.hindsight_service import hindsight_service
+    return hindsight_service.get_status()
+
+
+@router.post("/hindsight/retain/{analysis_id}")
+def retain_hindsight_memory(
+    analysis_id: str,
+    force: bool = False,
+    auth_user_id: Optional[str] = Depends(get_current_user_id)
+):
+    """Retains a single compact analysis memory in Hindsight with idempotency protection."""
+    from backend.services.hindsight_service import hindsight_service
+    data = db.get_analysis_by_id(analysis_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Analysis session not found.")
+    res = hindsight_service.retain_analysis_memory(data, force=force)
+    return res
+
+
+@router.post("/historical-intelligence")
+def get_historical_intelligence(
+    req: HistoricalIntelligenceRequest,
+    auth_user_id: Optional[str] = Depends(get_current_user_id)
+):
+    """
+    On-demand historical intelligence endpoint.
+    Compares current analysis with historical sessions using exact Supabase metrics,
+    and performs at most ONE recall against Hindsight long-term contextual memory.
+    """
+    from backend.services.hindsight_service import hindsight_service
+    
+    # Resolve target analysis ID
+    target_id = req.analysis_id or db._local_data.get("active_analysis_id")
+    if not target_id:
+        history = db.get_history(user_id=auth_user_id)
+        if history:
+            target_id = history[0].get("id") or history[0].get("analysis_id")
+            
+    if not target_id:
+        return {
+            "status": "success",
+            "has_sufficient_history": False,
+            "answer": "Not enough historical analysis data available yet.",
+            "message": "No analysis sessions available. Ingest a dataset to begin."
+        }
+
+    question = req.question or "Which complaints have worsened over time?"
+    result = hindsight_service.query_historical_intelligence(
+        current_analysis_id=target_id,
+        question=question,
+        user_id=auth_user_id
+    )
+    return result
+
+
+@router.get("/historical-intelligence/overview")
+def get_historical_intelligence_overview(
+    analysis_id: Optional[str] = Query(None),
+    auth_user_id: Optional[str] = Depends(get_current_user_id)
+):
+    """
+    Returns full historical trends, sentiment drift, and theme matrices
+    for the Historical Intelligence dashboard.
+    """
+    from backend.services.hindsight_service import hindsight_service
+    
+    target_id = analysis_id or db._local_data.get("active_analysis_id")
+    if not target_id:
+        history = db.get_history(user_id=auth_user_id)
+        if history:
+            target_id = history[0].get("id") or history[0].get("analysis_id")
+            
+    if not target_id:
+        return {
+            "status": "success",
+            "has_sufficient_history": False,
+            "message": "Not enough historical analysis data available yet."
+        }
+        
+    return hindsight_service.query_historical_intelligence(
+        current_analysis_id=target_id,
+        question="Historical overview of trends, improvements, and recurring issues",
+        user_id=auth_user_id
+    )

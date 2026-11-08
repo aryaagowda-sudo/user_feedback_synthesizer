@@ -18,7 +18,8 @@ import {
   LogOut,
   User,
   ShieldCheck,
-  BrainCircuit
+  BrainCircuit,
+  History
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -82,6 +83,12 @@ export default function MainLayout({ currentTab, onTabChange, children }) {
           label: 'AI Copilot Chat', 
           icon: Bot, 
           badge: 'RAG' 
+        },
+        { 
+          id: 'historical', 
+          label: 'Historical Intelligence', 
+          icon: History, 
+          badge: 'Hindsight' 
         },
       ]
     },

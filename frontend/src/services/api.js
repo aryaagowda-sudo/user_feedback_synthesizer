@@ -127,4 +127,18 @@ export const api = {
   correctFeedbackLabel: (params) => apiClient.post('/ml/feedback/correct-label', params),
 
   getRetrainingStatus: () => apiClient.get('/ml/retraining-status'),
+
+  // ==========================================================
+  // HINDSIGHT AI & HISTORICAL INTELLIGENCE (BUDGET CONSCIOUS)
+  // ==========================================================
+  getHindsightStatus: () => apiClient.get('/hindsight/status'),
+
+  retainHindsightMemory: (analysisId, force = false) => 
+    apiClient.post(`/hindsight/retain/${analysisId}?force=${force}`),
+
+  getHistoricalIntelligenceOverview: (analysisId = null) => 
+    apiClient.get('/historical-intelligence/overview', { params: analysisId ? { analysis_id: analysisId } : {} }),
+
+  queryHistoricalIntelligence: (analysisId, question) => 
+    apiClient.post('/historical-intelligence', { analysis_id: analysisId, question }),
 };

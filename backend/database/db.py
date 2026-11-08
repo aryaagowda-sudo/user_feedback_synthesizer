@@ -190,6 +190,9 @@ class DatabaseClient:
             "positive_percentage": pos_pct,
             "negative_percentage": neg_pct,
             "neutral_percentage": neu_pct,
+            "hindsight_status": "pending",
+            "hindsight_memory_id": None,
+            "hindsight_retained_at": None,
             "created_at": now_iso
         }
 
@@ -203,6 +206,7 @@ class DatabaseClient:
             "positive_percentage": pos_pct,
             "negative_percentage": neg_pct,
             "neutral_percentage": neu_pct,
+            "hindsight_status": "pending",
             "created_at": now_iso
         }
 
@@ -367,6 +371,43 @@ class DatabaseClient:
         self._save_local()
         logger.info(f"Activated analysis session {analysis_id}.")
         return True
+
+    def update_analysis_hindsight_status(
+        self,
+        analysis_id: str,
+        status: str,
+        memory_id: Optional[str] = None
+    ) -> bool:
+        """Updates Hindsight retention status ('pending', 'retained', 'failed') in Supabase and local storage."""
+        now_iso = datetime.now().isoformat()
+        updated = False
+
+        if self.use_supabase and self.supabase:
+            try:
+                update_payload: Dict[str, Any] = {
+                    "hindsight_status": status,
+                    "hindsight_retained_at": now_iso
+                }
+                if memory_id:
+                    update_payload["hindsight_memory_id"] = memory_id
+                
+                self.supabase.table("analyses").update(update_payload).eq("id", analysis_id).execute()
+                updated = True
+                logger.info(f"Updated Supabase analysis {analysis_id} hindsight_status='{status}'.")
+            except Exception as e:
+                logger.warning(f"Failed to update hindsight_status in Supabase: {e}")
+
+        # Update in local storage
+        self._sync_local_data()
+        for session in self._local_data.get("analysis_history", []):
+            if session.get("analysis_id") == analysis_id or session.get("id") == analysis_id:
+                session["hindsight_status"] = status
+                if memory_id:
+                    session["hindsight_memory_id"] = memory_id
+                session["hindsight_retained_at"] = now_iso
+                updated = True
+        self._save_local()
+        return updated
 
     def delete_analysis(self, analysis_id: str, user_id: Optional[str] = None) -> bool:
         """Deletes an analysis session and cascades deletion of its themes and feedback."""

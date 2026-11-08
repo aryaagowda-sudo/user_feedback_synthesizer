@@ -133,3 +133,8 @@ class AnalysisHistoryItem(BaseModel):
 class SummarizeRequest(BaseModel):
     analysis_id: Optional[str] = None
     theme_ids: Optional[List[str]] = None
+
+class HistoricalIntelligenceRequest(BaseModel):
+    analysis_id: Optional[str] = None
+    question: Optional[str] = "Which complaints have worsened over time?"
+    force_retain: Optional[bool] = False

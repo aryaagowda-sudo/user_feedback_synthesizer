@@ -77,6 +77,9 @@ CREATE TABLE IF NOT EXISTS public.analyses (
     positive_percentage FLOAT DEFAULT 0.0,
     negative_percentage FLOAT DEFAULT 0.0,
     neutral_percentage FLOAT DEFAULT 0.0,
+    hindsight_status TEXT DEFAULT 'pending',
+    hindsight_memory_id TEXT,
+    hindsight_retained_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -117,6 +120,9 @@ CREATE TABLE IF NOT EXISTS public.analysis_history (
     positive_percentage FLOAT DEFAULT 0.0,
     negative_percentage FLOAT DEFAULT 0.0,
     neutral_percentage FLOAT DEFAULT 0.0,
+    hindsight_status TEXT DEFAULT 'pending',
+    hindsight_memory_id TEXT,
+    hindsight_retained_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

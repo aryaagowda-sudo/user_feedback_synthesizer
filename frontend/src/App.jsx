@@ -10,6 +10,7 @@ import AnalysisHistory from './pages/AnalysisHistory';
 import Trends from './pages/Trends';
 import Settings from './pages/Settings';
 import MLModelLab from './pages/MLModelLab';
+import HistoricalIntelligence from './pages/HistoricalIntelligence';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState('dashboard');
@@ -26,6 +27,8 @@ export default function App() {
         return <AIInsights onNavigate={(tab) => setCurrentTab(tab)} />;
       case 'copilot':
         return <AICopilot />;
+      case 'historical':
+        return <HistoricalIntelligence onNavigate={(tab) => setCurrentTab(tab)} />;
       case 'history':
         return <AnalysisHistory onNavigate={(tab) => setCurrentTab(tab)} />;
       case 'trends':
