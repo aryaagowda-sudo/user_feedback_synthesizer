@@ -2,7 +2,7 @@ import os
 import json
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger("feedbackiq.ml.registry")
 
@@ -35,7 +35,7 @@ class ModelRegistry:
                         "model_type": "sentiment_transformer",
                         "version": "v1.0.0-baseline",
                         "status": "production",
-                        "created_at": datetime.utcnow().isoformat(),
+                        "created_at": datetime.now(timezone.utc).isoformat(),
                         "metrics": {
                             "accuracy": 0.892,
                             "macro_f1": 0.884,
@@ -108,7 +108,7 @@ class ModelRegistry:
             "model_type": model_type,
             "version": version_tag,
             "status": "candidate",
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "metrics": metrics,
             "hyperparameters": hyperparameters,
             "dataset_id": dataset_id
@@ -211,7 +211,7 @@ class ModelRegistry:
         data["candidate_model_id"] = None
 
         history_event = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "action": "promotion",
             "promoted_model_id": candidate_model_id,
             "demoted_model_id": current_prod_id,
@@ -247,7 +247,7 @@ class ModelRegistry:
         data["rollback_model_id"] = None
 
         history_event = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "action": "rollback",
             "reinstated_model_id": rollback_id,
             "rolled_back_from": current_prod_id
@@ -297,7 +297,7 @@ class ModelRegistry:
             "original_sentiment": original_sentiment,
             "original_category": original_category,
             "corrected_by": corrected_by,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
         if existing:

@@ -3,7 +3,7 @@ import json
 import logging
 import uuid
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 # Ensure Python trusts Windows system certificates (e.g. for antivirus shields/proxies)
@@ -173,7 +173,7 @@ class DatabaseClient:
         pos_pct = round((pos / total) * 100, 1) if total > 0 else 0.0
         neg_pct = round((neg / total) * 100, 1) if total > 0 else 0.0
         neu_pct = round((neu / total) * 100, 1) if total > 0 else 0.0
-        now_iso = datetime.utcnow().isoformat()
+        now_iso = datetime.now(timezone.utc).isoformat()
 
         # Clean user_id (must be valid UUID for Postgres public.profiles foreign key, else None)
         valid_user_id = user_id if is_valid_uuid(user_id) else None

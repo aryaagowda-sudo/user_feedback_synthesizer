@@ -41,3 +41,10 @@ Thumbs.db
 *.swo
 .vscode/
 .idea/
+
+# Large ML model weights & checkpoints
+*.safetensors
+*.bin
+*.pt
+*.pth
+

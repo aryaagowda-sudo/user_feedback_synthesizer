@@ -3,7 +3,7 @@ import json
 import logging
 import copy
 from typing import List, Dict, Any, Optional, Callable
-from datetime import datetime
+from datetime import datetime, timezone
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -82,7 +82,7 @@ class SentimentTrainer:
         Executes supervised fine-tuning with training/validation monitoring and checkpointing.
         """
         if model_id is None:
-            model_id = f"sentiment_distilbert_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+            model_id = f"sentiment_distilbert_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
 
         save_path = os.path.join(MODELS_DIR, model_id)
         os.makedirs(save_path, exist_ok=True)
@@ -111,9 +111,10 @@ class SentimentTrainer:
 
         # 3. Load Tokenizer & Model
         logger.info(f"Loading pretrained tokenizer & model weights from '{self.base_model_name}'...")
-        tokenizer = AutoTokenizer.from_pretrained(self.base_model_name)
-        model = AutoModelForSequenceClassification.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(self.base_model_name, revision="main")  # nosec B615
+        model = AutoModelForSequenceClassification.from_pretrained(  # nosec B615
             self.base_model_name,
+            revision="main",
             num_labels=3,
             id2label=SENTIMENT_INV_MAP,
             label2id=SENTIMENT_LABEL_MAP
@@ -307,7 +308,7 @@ class SentimentTrainer:
             "model_type": "sentiment_transformer",
             "base_model": self.base_model_name,
             "architecture": "DistilBertForSequenceClassification",
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "target_classes": ["Negative", "Neutral", "Positive"],
             "hyperparameters": {
                 "epochs": epochs,

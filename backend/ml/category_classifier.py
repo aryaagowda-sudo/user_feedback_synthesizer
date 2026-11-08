@@ -4,7 +4,7 @@ import json
 import logging
 import pickle
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
@@ -140,7 +140,7 @@ class CategoryClassifierSuite:
         selects the superior model based on Macro F1, and saves artifacts.
         """
         if model_id is None:
-            model_id = f"category_classifier_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+            model_id = f"category_classifier_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
 
         save_path = os.path.join(MODELS_DIR, model_id)
         os.makedirs(save_path, exist_ok=True)
@@ -187,7 +187,7 @@ class CategoryClassifierSuite:
 
         comparison_data = {
             "model_id": model_id,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "champion_model": champion_name,
             "champion_type": champion_type,
             "champion_selection_reason": champion_reason,
@@ -224,12 +224,13 @@ class CategoryClassifierSuite:
 
     def predict(self, model_id: str, texts: List[str]) -> List[str]:
         """Loads champion model and generates category predictions for unseen texts."""
-        model_file = os.path.join(MODELS_DIR, model_id, "champion_model.pkl")
-        if not os.path.exists(model_file):
+        safe_dir = os.path.abspath(MODELS_DIR)
+        model_file = os.path.abspath(os.path.join(MODELS_DIR, model_id, "champion_model.pkl"))
+        if not model_file.startswith(safe_dir) or not os.path.exists(model_file):
             raise FileNotFoundError(f"Champion model not found at {model_file}")
 
         with open(model_file, "rb") as f:
-            bundle = pickle.load(f)
+            bundle = pickle.load(f)  # nosec B301
 
         m_type = bundle["type"]
         model = bundle["model"]

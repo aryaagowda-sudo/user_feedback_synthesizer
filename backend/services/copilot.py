@@ -2,7 +2,7 @@ import os
 import re
 import json
 import logging
-import urllib.request
+import httpx
 import numpy as np
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
@@ -58,13 +58,10 @@ class FeedbackCopilotEngine:
                 }
             }
             try:
-                req = urllib.request.Request(
-                    url,
-                    data=json.dumps(payload).encode("utf-8"),
-                    headers={"Content-Type": "application/json"}
-                )
-                with urllib.request.urlopen(req, timeout=14) as response:
-                    res = json.loads(response.read().decode())
+                with httpx.Client(timeout=14.0) as client:
+                    resp = client.post(url, json=payload)
+                    resp.raise_for_status()
+                    res = resp.json()
                     text_content = res["candidates"][0]["content"]["parts"][0]["text"].strip()
                     cleaned = re.sub(r"^```(?:json)?|```$", "", text_content.strip(), flags=re.MULTILINE).strip()
                     return json.loads(cleaned)
@@ -90,16 +87,11 @@ class FeedbackCopilotEngine:
                 "max_tokens": 800
             }
             try:
-                req = urllib.request.Request(
-                    url,
-                    data=json.dumps(payload).encode("utf-8"),
-                    headers={
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {api_key}"
-                    }
-                )
-                with urllib.request.urlopen(req, timeout=14) as response:
-                    res = json.loads(response.read().decode())
+                headers = {"Authorization": f"Bearer {api_key}"}
+                with httpx.Client(timeout=14.0) as client:
+                    resp = client.post(url, json=payload, headers=headers)
+                    resp.raise_for_status()
+                    res = resp.json()
                     text_content = res["choices"][0]["message"]["content"].strip()
                     cleaned = re.sub(r"^```(?:json)?|```$", "", text_content.strip(), flags=re.MULTILINE).strip()
                     return json.loads(cleaned)

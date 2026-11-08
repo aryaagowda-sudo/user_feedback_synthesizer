@@ -2,7 +2,7 @@ import os
 import re
 import json
 import logging
-import urllib.request
+import httpx
 from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
 
@@ -47,13 +47,10 @@ class ThemeSummarizer:
                 }
             }
             try:
-                req = urllib.request.Request(
-                    url,
-                    data=json.dumps(payload).encode("utf-8"),
-                    headers={"Content-Type": "application/json"}
-                )
-                with urllib.request.urlopen(req, timeout=12) as response:
-                    res = json.loads(response.read().decode())
+                with httpx.Client(timeout=12.0) as client:
+                    resp = client.post(url, json=payload)
+                    resp.raise_for_status()
+                    res = resp.json()
                     text_content = res["candidates"][0]["content"]["parts"][0]["text"].strip()
                     cleaned = re.sub(r"^```(?:json)?|```$", "", text_content.strip(), flags=re.MULTILINE).strip()
                     return json.loads(cleaned)
@@ -79,16 +76,11 @@ class ThemeSummarizer:
                 "max_tokens": 600
             }
             try:
-                req = urllib.request.Request(
-                    url,
-                    data=json.dumps(payload).encode("utf-8"),
-                    headers={
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {api_key}"
-                    }
-                )
-                with urllib.request.urlopen(req, timeout=12) as response:
-                    res = json.loads(response.read().decode())
+                headers = {"Authorization": f"Bearer {api_key}"}
+                with httpx.Client(timeout=12.0) as client:
+                    resp = client.post(url, json=payload, headers=headers)
+                    resp.raise_for_status()
+                    res = resp.json()
                     text_content = res["choices"][0]["message"]["content"].strip()
                     cleaned = re.sub(r"^```(?:json)?|```$", "", text_content.strip(), flags=re.MULTILINE).strip()
                     return json.loads(cleaned)
@@ -251,6 +243,8 @@ Do not invent numbers, quotes, or issues not present in the customer comments. R
                 severity=severity
             )
 
+        calc_priority = "P1" if (severity == "High" or neg_pct >= 60.0) else ("P2" if (severity == "Medium" or neg_pct >= 30.0) else "P3")
+
         return {
             "theme_name": theme_name,
             "name": theme_name,  # Alias
@@ -258,6 +252,8 @@ Do not invent numbers, quotes, or issues not present in the customer comments. R
             "summary": llm_data["ai_summary"],  # Alias
             "main_complaint": llm_data["main_complaint"],
             "key_observations": llm_data["key_observations"],
+            "severity": severity,
+            "priority": calc_priority,
             "recommendation": llm_data["recommendation"],
             "suggested_action": llm_data["recommendation"],  # Alias
             "mention_count": total,

@@ -4,7 +4,7 @@ import json
 import hashlib
 import logging
 from typing import List, Dict, Any, Tuple, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import StratifiedShuffleSplit
@@ -73,9 +73,11 @@ def normalize_text_for_dedup(text: str) -> str:
     if not isinstance(text, str):
         return ""
     clean = text.lower().strip()
-    clean = re.sub(r"[^\w\s]", "", clean)
-    clean = re.sub(r"\s+", " ", clean)
-    return clean
+    norm = re.sub(r"[^\w\s]", "", clean)
+    norm = re.sub(r"\s+", " ", norm).strip()
+    if not norm:
+        return re.sub(r"\s+", " ", clean).strip()
+    return norm
 
 def text_hash(text: str) -> str:
     """Computes SHA-256 hash of normalized text."""
@@ -150,8 +152,24 @@ class DatasetManager:
         Loads CSV, inspects columns, cleans missing values, validates labels,
         identifies duplicates, and compiles dataset statistics.
         """
-        df = pd.read_csv(file_path_or_buffer)
+        # Check for empty input upfront
+        if hasattr(file_path_or_buffer, "seek") and hasattr(file_path_or_buffer, "read"):
+            content = file_path_or_buffer.read()
+            if not content or (isinstance(content, str) and not content.strip()):
+                raise ValueError("The uploaded CSV file is empty.")
+            file_path_or_buffer.seek(0)
+        elif isinstance(file_path_or_buffer, str) and os.path.isfile(file_path_or_buffer):
+            if os.path.getsize(file_path_or_buffer) == 0:
+                raise ValueError("The uploaded CSV file is empty.")
+
+        try:
+            df = pd.read_csv(file_path_or_buffer)
+        except pd.errors.EmptyDataError:
+            raise ValueError("The uploaded CSV file is empty.")
+
         total_raw_rows = len(df)
+        if total_raw_rows == 0:
+            raise ValueError("No feedback rows found in the CSV file.")
 
         # Standardize column names
         col_map = {}
@@ -216,7 +234,7 @@ class DatasetManager:
         if "date" in df.columns:
             df["date_parsed"] = pd.to_datetime(df["date"], errors="coerce")
         else:
-            df["date"] = datetime.utcnow().strftime("%Y-%m-%d")
+            df["date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             df["date_parsed"] = pd.to_datetime(df["date"])
 
         # 6. Source
@@ -402,7 +420,7 @@ class DatasetManager:
         package = {
             "dataset_id": dataset_id,
             "dataset_name": dataset_name,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "stats": stats,
             "split_summary": split_summary,
             "train_data": train_df[["feedback", "sentiment", "category", "rating", "source", "date"]].to_dict(orient="records"),

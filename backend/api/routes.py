@@ -3,7 +3,7 @@ import csv
 import uuid
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query, BackgroundTasks, Header, Depends
 from backend.models.schemas import (
@@ -66,6 +66,46 @@ router = APIRouter()
 # Thread pool for non-blocking background analysis tasks
 executor = ThreadPoolExecutor(max_workers=2)
 
+def clean_feedback_items(raw_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Cleans and deduplicates raw feedback dictionaries, sanitizing ratings and dates.
+    """
+    cleaned_items = []
+    seen_texts = set()
+
+    for it in raw_items:
+        text = str(it.get("feedback") or it.get("feedback_text") or "").strip()
+        if not text:
+            continue
+        norm_key = text.lower()
+        if norm_key in seen_texts:
+            continue
+        seen_texts.add(norm_key)
+
+        rating = it.get("rating")
+        try:
+            if rating is not None and str(rating).strip() != "":
+                parsed_r = int(float(str(rating).strip()))
+                rating = max(1, min(5, parsed_r))
+            else:
+                rating = 3
+        except Exception:
+            rating = 3
+
+        d_str = str(it.get("date") or date.today().isoformat()).strip()
+        src = str(it.get("source") or "Web App").strip()
+
+        cleaned_items.append({
+            "id": it.get("id") or f"fb_{uuid.uuid4().hex[:8]}",
+            "feedback_text": text,
+            "rating": rating,
+            "date": d_str,
+            "source": src,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+
+    return cleaned_items
+
 def run_nlp_pipeline_sync(
     raw_items: List[Dict[str, Any]], 
     dataset_name: str = "Uploaded Dataset", 
@@ -110,35 +150,7 @@ def run_pipeline_with_progress(
                 message="Cleaning whitespace, deduplicating, and validating records..."
             )
 
-        seen_texts = set()
-        cleaned_items = []
-
-        for it in raw_items:
-            text = str(it.get("feedback") or it.get("feedback_text") or "").strip()
-            if not text:
-                continue
-            norm_key = text.lower()
-            if norm_key in seen_texts:
-                continue
-            seen_texts.add(norm_key)
-
-            rating = it.get("rating")
-            try:
-                rating = int(rating) if rating is not None and str(rating).strip() != "" else None
-            except Exception:
-                rating = None
-
-            d_str = str(it.get("date") or date.today().isoformat()).strip()
-            src = str(it.get("source") or "Web App").strip()
-
-            cleaned_items.append({
-                "id": it.get("id") or f"fb_{uuid.uuid4().hex[:8]}",
-                "feedback_text": text,
-                "rating": rating,
-                "date": d_str,
-                "source": src,
-                "created_at": datetime.utcnow().isoformat()
-            })
+        cleaned_items = clean_feedback_items(raw_items)
 
         if not cleaned_items:
             raise ValueError("No valid feedback items provided after data cleaning.")

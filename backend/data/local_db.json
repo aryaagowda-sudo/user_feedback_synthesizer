@@ -4,12 +4,85 @@
       "feedback_text": "Secret 2",
       "sentiment": "Positive",
       "confidence": 0.9,
-      "analysis_id": "5e53253c-f550-4f5d-a25d-3df5e218e190",
-      "user_id": "f09006ad-b87f-44a8-aa93-faa231c737f6"
+      "analysis_id": "a07e7ff3-df54-4e75-82cd-552120b36c2f",
+      "user_id": "257ad934-1c5d-4099-8c0c-c4dddb5d6f49"
     }
   ],
   "themes": [],
   "analysis_history": [
+    {
+      "id": "2397b8a7-4f08-40d9-a994-b5c582acd2fd",
+      "user_id": null,
+      "analysis_name": "Integration Test Session",
+      "total_feedback": 2,
+      "positive_count": 1,
+      "negative_count": 1,
+      "neutral_count": 0,
+      "positive_percentage": 50.0,
+      "negative_percentage": 50.0,
+      "neutral_percentage": 0.0,
+      "hindsight_status": "pending",
+      "hindsight_memory_id": null,
+      "hindsight_retained_at": null,
+      "created_at": "2026-11-08T19:07:50.151904",
+      "themes_count": 2
+    },
+    {
+      "id": "e3e5d332-350b-4567-b461-45c25ee482c9",
+      "user_id": null,
+      "analysis_name": "reviews_1000.csv",
+      "total_feedback": 946,
+      "positive_count": 321,
+      "negative_count": 613,
+      "neutral_count": 12,
+      "positive_percentage": 33.9,
+      "negative_percentage": 64.8,
+      "neutral_percentage": 1.3,
+      "created_at": "2026-11-08T18:39:59.333618",
+      "themes_count": 6
+    },
+    {
+      "id": "ee725917-77d8-453b-b4e3-83e95db780a3",
+      "user_id": "aa0e6074-d0c3-4d69-b7d1-e279b1886f7f",
+      "analysis_name": "User 2 Private Session",
+      "total_feedback": 1,
+      "positive_count": 1,
+      "negative_count": 0,
+      "neutral_count": 0,
+      "positive_percentage": 100.0,
+      "negative_percentage": 0.0,
+      "neutral_percentage": 0.0,
+      "created_at": "2026-11-08T17:45:45.831800",
+      "themes_count": 0
+    },
+    {
+      "id": "daa242b4-32ab-4995-bec6-5177d3ec42c5",
+      "user_id": "0522332f-8df4-4b50-ba00-44ce16d41c02",
+      "analysis_name": "User 1 Private Session",
+      "total_feedback": 1,
+      "positive_count": 1,
+      "negative_count": 0,
+      "neutral_count": 0,
+      "positive_percentage": 100.0,
+      "negative_percentage": 0.0,
+      "neutral_percentage": 0.0,
+      "created_at": "2026-11-08T17:45:45.605952",
+      "themes_count": 0
+    },
+    {
+      "id": "7a1e4113-82c3-4d4e-bf49-05f5f79e022a",
+      "user_id": null,
+      "analysis_name": "reviews_1000.csv",
+      "total_feedback": 946,
+      "positive_count": 321,
+      "negative_count": 613,
+      "neutral_count": 12,
+      "positive_percentage": 33.9,
+      "negative_percentage": 64.8,
+      "neutral_percentage": 1.3,
+      "created_at": "2026-11-08T17:26:07.459077",
+      "themes_count": 6
+    },
     {
       "id": "analysis_20261108_162905_35c2be",
       "user_id": null,
@@ -123,5 +196,5 @@
       "created_at": "2026-11-08T08:53:34.897609"
     }
   ],
-  "active_analysis_id": "analysis_20261108_162905_35c2be"
+  "active_analysis_id": "2397b8a7-4f08-40d9-a994-b5c582acd2fd"
 }

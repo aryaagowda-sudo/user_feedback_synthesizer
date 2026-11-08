@@ -1,0 +1,14 @@
+{
+  "name": "feedbackiq",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FeedbackIQ — User Feedback Synthesizer using React, FastAPI, Transformers, and Supabase",
+  "scripts": {
+    "test": "py -3.13 -m pytest backend/tests",
+    "test:backend": "py -3.13 -m pytest backend/tests",
+    "test:security": "py -3.13 -m bandit -r backend -ll",
+    "build": "npm run build --prefix frontend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:backend": "py -3.13 -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload"
+  }
+}

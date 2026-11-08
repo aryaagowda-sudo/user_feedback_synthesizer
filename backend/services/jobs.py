@@ -1,6 +1,6 @@
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 from threading import Lock
 
@@ -14,7 +14,7 @@ class JobManager:
 
     def create_job(self, total_items: int = 0, dataset_name: str = "Dataset") -> str:
         job_id = f"job_{uuid.uuid4().hex[:10]}"
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         with self._lock:
             self._jobs[job_id] = {
                 "job_id": job_id,
@@ -74,7 +74,7 @@ class JobManager:
                 job["error"] = error
             for k, v in kwargs.items():
                 job[k] = v
-            job["updated_at"] = datetime.utcnow().isoformat()
+            job["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
         with self._lock:
