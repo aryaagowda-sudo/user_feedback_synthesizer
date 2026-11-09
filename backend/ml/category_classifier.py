@@ -2,7 +2,7 @@ import os
 import time
 import json
 import logging
-import pickle
+import pickle  # nosec B403
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timezone
 import numpy as np

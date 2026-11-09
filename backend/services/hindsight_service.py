@@ -24,18 +24,18 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 
+logger = logging.getLogger("feedbackiq.hindsight")
+
 # Ensure Python trusts Windows system certificates for HTTPS
 try:
     import truststore
     truststore.inject_into_ssl()
-except Exception:
-    pass
+except Exception as e:
+    logger.debug(f"Truststore injection not applied: {e}")
 
 load_dotenv()
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
-
-logger = logging.getLogger("feedbackiq.hindsight")
 
 # ----------------------------------------------------------------------
 # Configuration & Guardrails

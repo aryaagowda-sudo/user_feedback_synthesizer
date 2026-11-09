@@ -6,18 +6,18 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 
+logger = logging.getLogger("feedbackiq.db")
+
 # Ensure Python trusts Windows system certificates (e.g. for antivirus shields/proxies)
 try:
     import truststore
     truststore.inject_into_ssl()
-except Exception:
-    pass
+except Exception as e:
+    logger.debug(f"Truststore injection not applied: {e}")
 
 load_dotenv()
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
-
-logger = logging.getLogger("feedbackiq.db")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", os.getenv("VITE_SUPABASE_URL", "")).strip()
 # Use Service Role Key on backend if available for administrative RLS bypass, otherwise Anon Key
@@ -69,8 +69,15 @@ class DatabaseClient:
 
         if has_creds:
             try:
-                from supabase import create_client
-                client = create_client(SUPABASE_URL, SUPABASE_KEY)
+                import httpx
+                from supabase import create_client, ClientOptions
+                # Configure dedicated httpx client with timeout and verified SSL certificates
+                http_client = httpx.Client(
+                    timeout=httpx.Timeout(15.0, connect=10.0),
+                    verify=True
+                )
+                options = ClientOptions(httpx_client=http_client)
+                client = create_client(SUPABASE_URL, SUPABASE_KEY, options=options)
                 # Test connection by making a lightweight read
                 _ = client.table("analyses").select("id").limit(1).execute()
                 self.supabase = client
@@ -119,8 +126,8 @@ class DatabaseClient:
                     with open(LOCAL_STORAGE_PATH, "r", encoding="utf-8") as f:
                         self._local_data = json.load(f)
                     self._last_mtime = mtime
-            except Exception:
-                pass
+            except (OSError, json.JSONDecodeError) as e:
+                logger.debug(f"Local storage disk sync skipped: {e}")
 
     def _save_local(self):
         """Saves current state to local JSON file."""

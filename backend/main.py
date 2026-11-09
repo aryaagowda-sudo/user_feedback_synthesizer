@@ -3,12 +3,16 @@ import csv
 import logging
 from contextlib import asynccontextmanager
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("feedbackiq.main")
+
 # Ensure Python trusts Windows system certificates (e.g. for antivirus shields/proxies)
 try:
     import truststore
     truststore.inject_into_ssl()
-except Exception:
-    pass
+except Exception as e:
+    logger.debug(f"Truststore injection not applied: {e}")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,12 +27,8 @@ try:
     import torch
     threads = min(8, os.cpu_count() or 4)
     torch.set_num_threads(threads)
-except Exception:
-    pass
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-logger = logging.getLogger("feedbackiq.main")
+except Exception as e:
+    logger.debug(f"Torch CPU thread allocation notice: {e}")
 
 SAMPLE_CSV_PATH = os.path.join(os.path.dirname(__file__), "..", "dataset", "sample_feedback.csv")
 

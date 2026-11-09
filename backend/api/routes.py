@@ -13,6 +13,8 @@ from backend.models.schemas import (
 )
 from backend.database.db import db, is_valid_uuid
 
+logger = logging.getLogger("feedbackiq.routes")
+
 def get_current_user_id(
     authorization: Optional[str] = Header(None),
     x_user_id: Optional[str] = Header(None)
@@ -30,8 +32,8 @@ def get_current_user_id(
                     res = db.supabase.auth.get_user(token)
                     if res and res.user and res.user.id:
                         return str(res.user.id)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Supabase auth verification skipped: {e}")
 
             # 2. Extract from standard JWT payload
             try:
@@ -44,8 +46,8 @@ def get_current_user_id(
                     sub = payload.get("sub") or payload.get("id")
                     if sub and is_valid_uuid(str(sub)):
                         return str(sub)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"JWT payload decoding fallback: {e}")
 
     if x_user_id and is_valid_uuid(x_user_id):
         return x_user_id
