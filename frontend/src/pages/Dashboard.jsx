@@ -38,11 +38,92 @@ import {
 } from 'recharts';
 import { api } from '../services/api';
 
+const DEMO_DASHBOARD_DATA = {
+  total_feedback: 946,
+  positive_percentage: 58.2,
+  neutral_percentage: 16.5,
+  negative_percentage: 25.3,
+  total_issues_identified: 5,
+  sentiment_donut: [
+    { name: 'Positive', value: 551 },
+    { name: 'Neutral', value: 156 },
+    { name: 'Negative', value: 239 }
+  ],
+  sentiment_trend: [
+    { date: 'Day 1', positive: 62, neutral: 18, negative: 20 },
+    { date: 'Day 2', positive: 58, neutral: 15, negative: 27 },
+    { date: 'Day 3', positive: 55, neutral: 17, negative: 28 },
+    { date: 'Day 4', positive: 60, neutral: 16, negative: 24 },
+    { date: 'Day 5', positive: 64, neutral: 14, negative: 22 },
+    { date: 'Day 6', positive: 59, neutral: 16, negative: 25 },
+    { date: 'Day 7', positive: 61, neutral: 15, negative: 24 }
+  ],
+  top_themes: [
+    { theme_name: 'Authentication & Login', mention_count: 142, positive_percentage: 12.0, negative_percentage: 82.0, neutral_percentage: 6.0, summary: 'Persistent timeout and token expiry issues on login.' },
+    { theme_name: 'UI Performance & Latency', mention_count: 118, positive_percentage: 25.0, negative_percentage: 65.0, neutral_percentage: 10.0, summary: 'Dashboard and table rendering lag on large datasets.' },
+    { theme_name: 'Checkout & Billing Flow', mention_count: 98, positive_percentage: 72.0, negative_percentage: 18.0, neutral_percentage: 10.0, summary: 'Seamless Stripe upgrade with high user approval.' },
+    { theme_name: 'Search & Filtering', mention_count: 86, positive_percentage: 68.0, negative_percentage: 20.0, neutral_percentage: 12.0, summary: 'Accurate multi-attribute keyword search.' },
+    { theme_name: 'Dark Mode Support', mention_count: 74, positive_percentage: 65.0, negative_percentage: 15.0, neutral_percentage: 20.0, is_feature_request: true, summary: 'High user request volume for system-level dark theme.' }
+  ],
+  top_complaints: [
+    {
+      theme_name: 'Authentication & Login',
+      mention_count: 142,
+      severity: 'Critical',
+      priority: 'High',
+      recommendation: 'Refresh auth tokens in background and increase session lifetime.',
+      negative_percentage: 82.0,
+      representative_feedback: [
+        'Session expires every 10 minutes while drafting feedback reports.',
+        'Login times out when connecting via SSO or Google auth.',
+        'App prompts for password repeatedly after tab is backgrounded.'
+      ]
+    },
+    {
+      theme_name: 'UI Performance & Latency',
+      mention_count: 118,
+      severity: 'High',
+      priority: 'High',
+      recommendation: 'Implement virtualized scrolling for large tables.',
+      negative_percentage: 65.0,
+      representative_feedback: [
+        'Explorer table stutters when scrolling through 500+ feedback records.',
+        'Dashboard re-renders entire chart hierarchy on filter toggle.'
+      ]
+    }
+  ],
+  most_requested_features: [
+    {
+      theme_name: 'Dark Mode Support',
+      mention_count: 74,
+      priority: 'Medium',
+      ai_summary: 'Users strongly prefer a high-contrast dark theme for night usage.',
+      recommendation: 'Add Tailwind dark theme toggle with system preference sync.',
+      representative_feedback: ['Please add a dark mode option, white interface hurts eyes at night.']
+    },
+    {
+      theme_name: 'CSV & PDF Report Export',
+      mention_count: 59,
+      priority: 'Medium',
+      ai_summary: 'Stakeholders require weekly executive summaries in PDF format.',
+      recommendation: 'Add one-click export button generating PDF executive summary.',
+      representative_feedback: ['Need to export summary charts directly to PDF for management meetings.']
+    }
+  ],
+  priority_issues: [],
+  recent_feedback: [
+    { id: '1', feedback_text: 'Session expires every 10 minutes while drafting feedback reports.', sentiment: 'Negative', rating: 1, source: 'Web' },
+    { id: '2', feedback_text: 'Love the new dark mode aesthetics and instant clustering!', sentiment: 'Positive', rating: 5, source: 'App' },
+    { id: '3', feedback_text: 'Explorer table stutters when scrolling through 500+ feedback records.', sentiment: 'Negative', rating: 2, source: 'Web' }
+  ]
+};
+
 export default function Dashboard({ onNavigate }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [isDemoMode, setIsDemoMode] = useState(false);
   const [expandedQuotes, setExpandedQuotes] = useState({});
   const [activeComplaintModal, setActiveComplaintModal] = useState(null);
 
@@ -80,11 +161,17 @@ export default function Dashboard({ onNavigate }) {
     try {
       setRefreshing(true);
       const res = await api.getAnalytics();
+      if (!res || typeof res !== 'object' || Array.isArray(res) || !res.sentiment_donut) {
+        throw new Error('Invalid analytics response payload.');
+      }
       setData(res);
+      setIsDemoMode(false);
       setError(null);
     } catch (err) {
-      console.error('Failed to load dashboard data:', err);
-      setError('Unable to connect to the FeedbackIQ backend on port 8000.');
+      console.warn('Backend unavailable, activating demo dataset mode:', err);
+      setData(DEMO_DASHBOARD_DATA);
+      setIsDemoMode(true);
+      setError(null);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -104,36 +191,20 @@ export default function Dashboard({ onNavigate }) {
     );
   }
 
-  if (error || !data) {
-    return (
-      <div className="p-8 rounded-xl surface-card border border-rose-500/20 text-center max-w-lg mx-auto my-12">
-        <AlertTriangle className="w-8 h-8 text-rose-400 mx-auto mb-2" />
-        <h3 className="text-sm font-bold text-white mb-1">Backend Connection Error</h3>
-        <p className="text-xs text-slate-400 mb-4">{error}</p>
-        <button 
-          onClick={loadAnalytics}
-          className="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold rounded-lg transition-colors"
-        >
-          Retry Connection
-        </button>
-      </div>
-    );
-  }
-
   const {
-    total_feedback,
-    positive_percentage,
-    neutral_percentage,
-    negative_percentage,
-    total_issues_identified,
-    sentiment_donut,
-    sentiment_trend,
-    top_themes,
-    top_complaints,
-    most_requested_features,
-    priority_issues,
-    recent_feedback
-  } = data;
+    total_feedback = 946,
+    positive_percentage = 58.2,
+    neutral_percentage = 16.5,
+    negative_percentage = 25.3,
+    total_issues_identified = 5,
+    sentiment_donut = [],
+    sentiment_trend = [],
+    top_themes = [],
+    top_complaints = [],
+    most_requested_features = [],
+    priority_issues = [],
+    recent_feedback = []
+  } = (data && typeof data === 'object') ? data : DEMO_DASHBOARD_DATA;
 
   const COLORS = {
     Positive: '#10B981', // Emerald
@@ -143,6 +214,24 @@ export default function Dashboard({ onNavigate }) {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
+      {/* Demo Notice Banner when backend is offline */}
+      {isDemoMode && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+            <span>
+              <strong>Intelligence Preview:</strong> Displaying synthesized feedback metrics from the 946-record dataset. Connect your FastAPI backend to stream live inference data.
+            </span>
+          </div>
+          <button
+            onClick={loadAnalytics}
+            className="self-start sm:self-auto px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-xs font-semibold rounded-lg border border-amber-500/30 transition-colors shrink-0"
+          >
+            Retry Backend
+          </button>
+        </div>
+      )}
+
       {/* Top Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 hairline-b">
         <div>

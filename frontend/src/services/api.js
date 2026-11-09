@@ -33,7 +33,13 @@ apiClient.interceptors.request.use(async (config) => {
 
 // Response interceptor for clear, clean error handling
 apiClient.interceptors.response.use(
-  (response) => response.data,
+  (response) => {
+    // If response returned HTML or a string (e.g. from static host SPA fallback when API backend is absent), reject!
+    if (typeof response.data === 'string' && (response.data.trim().startsWith('<!doctype') || response.data.trim().startsWith('<html'))) {
+      return Promise.reject(new Error('Backend server is offline or not reachable.'));
+    }
+    return response.data;
+  },
   (error) => {
     const message = error.response?.data?.detail || error.message || 'Network error occurred';
     console.error('API Error:', message);
