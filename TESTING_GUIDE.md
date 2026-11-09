@@ -132,3 +132,21 @@ Verify the frontend compiles cleanly for production:
 npm run build
 ```
 Output bundle will be generated in `frontend/dist`.
+
+---
+
+## 7. GitHub Actions CI Pipeline
+
+The project features a continuous integration pipeline defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+### Workflow Triggers
+- **Push** to `main`
+- **Pull Request** targeting `main`
+- **Manual Trigger** via GitHub Actions `workflow_dispatch`
+
+### CI Jobs
+1. **Backend Tests (`backend-tests`)**: Sets up Python 3.13, installs dependencies, and runs all 67 pytest tests hermetically with zero external credential dependencies.
+2. **Frontend Tests (`frontend-tests`)**: Sets up Node.js 20, runs `npm ci` in `frontend/`, and runs `npm test` (`vite build`).
+3. **Security Audits (`security-checks`)**: Scans backend with Bandit AST analysis and scans frontend dependencies with `npm audit --audit-level=high`.
+4. **Frontend Production Build (`frontend-build`)**: Builds production assets and archives them with `actions/upload-artifact@v4`.
+
