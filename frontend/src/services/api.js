@@ -1,8 +1,13 @@
 import axios from 'axios';
 import { supabase } from './supabase';
 
-// Vite proxy forwards /api -> http://localhost:8000
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+// Clean and normalize API Base URL
+// In development, defaults to '/api' which Vite proxies to http://127.0.0.1:8000
+// In production, configure VITE_API_URL in Vercel to point to your Render service (e.g. https://feedbackiq-api.onrender.com)
+const rawBaseUrl = import.meta.env.VITE_API_URL;
+const API_BASE_URL = (rawBaseUrl && rawBaseUrl.trim()) 
+  ? rawBaseUrl.trim().replace(/\/+$/, '') 
+  : '/api';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

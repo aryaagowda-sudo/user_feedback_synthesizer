@@ -351,10 +351,14 @@ def run_pipeline_with_progress(
 # ==========================================================
 
 @router.get("/")
+@router.get("/health")
 @router.get("/system/status")
 def health_check():
     """Returns database connectivity mode, health status, and active dataset metrics."""
-    return db.get_system_status()
+    res = db.get_system_status()
+    res["status"] = "healthy"
+    res["service"] = "FeedbackIQ API"
+    return res
 
 @router.get("/analysis-status/{job_id}")
 def get_analysis_status(job_id: str):

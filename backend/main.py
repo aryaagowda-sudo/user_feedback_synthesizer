@@ -89,19 +89,38 @@ app = FastAPI(
 )
 
 # Enable CORS for frontend Vite dev server, preview, and production domains
+cors_origins_env = os.getenv("CORS_ORIGINS", "")
+allowed_origins = [
+    "https://feedbackiq-wheat.vercel.app",
+    "https://feedbackiq-arya-3d89.vercel.app",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+if cors_origins_env:
+    for origin in cors_origins_env.split(","):
+        origin = origin.strip()
+        if origin and origin not in allowed_origins:
+            allowed_origins.append(origin)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Mount routers at both root and /api prefixes for seamless direct and proxy compatibility
 app.include_router(router)
+app.include_router(router, prefix="/api")
 app.include_router(ml_router)
+app.include_router(ml_router, prefix="/api")
 
 if __name__ == "__main__":
     import uvicorn
-    host = os.getenv("HOST", "127.0.0.1")
+    host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run("backend.main:app", host=host, port=port, reload=True)
